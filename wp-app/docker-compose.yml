@@ -1,0 +1,96 @@
+# Services
+services:
+
+  # nginx for http server service
+  nginx:
+    container_name: ${CONTAINER_NAME}-nginx
+    build:
+      context: .
+      dockerfile: ./nginx/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HOSTNAME: ${HOSTNAME}
+    ports:
+      - "80:80"
+      # - "443:443" # for SSL (not working yet)
+    volumes:
+      - ./nginx:/etc/nginx/conf.d:rw
+      - wordpress:/var/www/html
+    networks:
+      - internal
+
+  # database service
+  database:
+    container_name: ${CONTAINER_NAME}-database
+    image: mysql:8.0.16
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - MYSQL_DATABASE=${DATABASE_NAME}
+      - MYSQL_PASSWORD=${DATABASE_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${DATABASE_ROOT_PASSWORD}
+      - MYSQL_USER=${DATABASE_USER}
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$DATABASE_ROOT_PASSWORD" ]
+      # interval: 1m30s
+      timeout: 30s
+      retries: 5
+      # start_period: 30s
+    ports:
+      - "3306:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - internal
+
+  # Admin for database
+  phpmyadmin:
+    container_name: ${CONTAINER_NAME}-phpmyadmin
+    image: phpmyadmin/phpmyadmin
+    env_file:
+      - .env
+    environment:
+      - PMA_HOST=database # database service name
+      - PMA_PORT=3306
+      - MYSQL_ROOT_PASSWORD=${DATABASE_ROOT_PASSWORD}
+    ports:
+      - "8081:80"
+    networks:
+      - internal
+
+  # Wordpress image
+  wordpress:
+    depends_on:
+      - database # database service name
+    container_name: ${CONTAINER_NAME}-wordpress
+    image: wordpress:6.5.5-php8.2-fpm-alpine
+    entrypoint:
+    - sh
+    - -c
+    - |
+      sed -i 's/listen = 127.0.0.1:9000/listen = 0.0.0.0:9000/' /usr/local/etc/php-fpm.d/www.conf && docker-entrypoint.sh php-fpm
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - WORDPRESS_DB_HOST=database:3306 # database service name
+      - WORDPRESS_DB_NAME=${DATABASE_NAME}
+      - WORDPRESS_DB_USER=${DATABASE_USER}
+      - WORDPRESS_DB_PASSWORD=${DATABASE_PASSWORD}
+    volumes:
+      - wordpress:/var/www/html
+    networks:
+      - internal
+
+# Volumes to persist
+volumes:
+  dbdata:
+  wordpress:
+
+# Networks for internal communication
+networks:
+  internal:
+    driver: bridge
