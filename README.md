@@ -20,5 +20,5 @@ basic wp docker setup, not running SSL yet sorry..
 
 ## Dependencies
 
-Docker
-Docker Compose CLI
+- Docker
+- Docker Compose CLI
